@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>行业协助助手</title>
+    
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Remix Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
+    <style>
+        /* === 全局设置 === */
+        :root {
+            --primary: #1677FF;   /* 商务蓝 */
+            --secondary: #FF6600; /* 活力橙 */
+            --bg: #F5F5F9;
+            --text-main: #333;
+            --success: #10B981;
+            --danger: #EF4444;
+        }
+
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; 
+            background-color: var(--bg); 
+            color: var(--text-main);
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: none;
+        }
+        
+        .font-num { font-family: "DIN Alternate", "Roboto Mono", Helvetica, Arial, sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* === 组件风格 === */
+        .header-bar {
+            background: #1677FF;
+            color: white;
+            box-shadow: 0 2px 10px rgba(22, 119, 255, 0.2);
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            border: 1px solid rgba(0,0,0,0.02);
+            transition: all 0.2s;
+        }
+        .card:active { transform: scale(0.995); background: #FAFAFA; }
+
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-secondary { background: var(--secondary); color: white; }
+        .btn-outline { border: 1px solid #ddd; color: #666; background: white; }
+
+        /* 动画 */
+        .slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+        .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        
+        .radio-box input:checked + div {
+            background: #E6F7FF;
+            border-color: #1677FF;
+            color: #1677FF;
+            font-weight: bold;
+        }
+
+        .guide-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9999; }
+        .guide-box { position: absolute; background: white; padding: 15px; border-radius: 8px; max-width: 280px; animation: bounce 1s infinite alternate; color: #333; }
+        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-5px); } }
+
+        .fab-btn {
+            position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%);
+            width: 56px; height: 56px; border-radius: 50%;
+            background: var(--primary); 
+            box-shadow: 0 4px 12px rgba(22, 119, 255, 0.3);
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 28px; z-index: 50; border: 4px solid #fff;
+        }
+
+        .status-step { position: relative; z-index: 1; }
+        .status-step::before { content:''; position:absolute; top:50%; left:-50%; width:100%; height:2px; background:#E5E7EB; z-index:-1; }
+        .status-step:first-child::before { display:none; }
+        .status-step.active .step-dot { background: var(--primary); border-color: var(--primary); color: white; }
+        .status-step.active::before { background: var(--primary); }
+        
+        .watermark { position: absolute; inset: 0; pointer-events: none; z-index: 20; display: flex; align-items: center; justify-content: center; background: repeating-linear-gradient(-45deg, transparent, transparent 100px, rgba(255,255,255,0.1) 100px, rgba(255,255,255,0.1) 200px); }
+        .watermark::after { content: "仅供平台报价使用"; font-size: 20px; color: rgba(255,255,255,0.4); transform: rotate(-30deg); }
+    </style>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { primary: '#1677FF', secondary: '#FF6600', bg: '#F5F5F9' },
+                    borderRadius: { 'xl': '12px' }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-screen flex justify-center overflow-hidden bg-gray-100">
+
+    <div id="app" class="w-full max-w-md bg-[#F5F5F9] h-full relative shadow-2xl flex flex-col overflow-hidden">
+        
+        <!-- === 全局隐藏文件输入框 (修复上传问题的关键) === -->
+        <input type="file" ref="globalFileInput" class="hidden" accept="image/*" @change="handleGlobalFileChange">
+
+        <!-- === 0. 登录页 === -->
+        <div v-if="!isLoggedIn" class="absolute inset-0 z-[100] bg-white flex flex-col px-8 py-12">
+            <div v-if="loginStep === 'form'" class="flex flex-col h-full">
+                <div class="mt-10 mb-10 text-center">
+                    <div class="w-20 h-20 bg-primary rounded-2xl mx-auto flex items-center justify-center text-white text-4xl mb-4 shadow-lg">
+                        <i class="ri-shield-check-fill"></i>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-800">行业协助助手</div>
+                    <div class="text-gray-400 text-sm mt-1">仅限认证从业人员</div>
+                </div>
+                
+                <div class="space-y-5">
+                    <div>
+                        <div class="text-sm font-bold text-gray-700 mb-2">手机号码</div>
+                        <div class="h-12 bg-gray-50 rounded-lg flex items-center px-4 border border-gray-200">
+                            <span class="text-gray-500 mr-3">+86</span>
+                            <input v-model="loginForm.phone" type="tel" class="flex-1 bg-transparent outline-none text-base" placeholder="请输入手机号">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="text-sm font-bold text-gray-700 mb-2">行业执照 <span class="text-red-500">*</span></div>
+                        <div class="h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center bg-gray-50/50 cursor-pointer relative overflow-hidden hover:border-primary transition-colors" @click="$refs.licenseUpload.click()">
+                            <img v-if="loginForm.licenseImg" :src="loginForm.licenseImg" class="w-full h-full object-cover rounded-xl">
+                            <div v-else class="text-center text-gray-400">
+                                <i class="ri-image-add-line text-3xl"></i>
+                                <div class="text-xs mt-2">点击上传营业执照/名片</div>
+                            </div>
+                            <input type="file" ref="licenseUpload" class="hidden" accept="image/*" @change="handleLicenseUpload">
+                        </div>
+                    </div>
+
+                    <button @click="doLogin" class="w-full h-12 btn-primary rounded-lg font-bold text-lg shadow-lg mt-4 active:opacity-90">
+                        {{ isLoggingIn ? '资料提交中...' : '提交审核' }}
+                    </button>
+                </div>
+            </div>
+
+            <div v-else-if="loginStep === 'audit'" class="flex flex-col h-full items-center justify-center text-center">
+                <div class="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mb-6">
+                    <i class="ri-time-fill text-primary text-5xl"></i>
+                </div>
+                <h2 class="text-xl font-bold text-gray-800 mb-2">资料审核中</h2>
+                <p class="text-gray-500 text-sm px-10 mb-8">您的入驻申请已提交，后台管理员将在 1-3 个工作日内完成资质审核。</p>
+                <div class="w-full bg-gray-50 p-4 rounded-xl text-left text-xs text-gray-500 mb-8 border border-gray-100">
+                    <div>申请账号：{{loginForm.phone}}</div>
+                    <div class="mt-2">提交时间：刚刚</div>
+                    <div class="mt-2">当前状态：<span class="text-orange-500 font-bold">待审核</span></div>
+                </div>
+                <button @click="demoAdminApprove" class="text-primary text-sm underline font-bold cursor-pointer">
+                    (演示) 管理员一键通过
+                </button>
+            </div>
+        </div>
+
+        <!-- === 1. 首页头部 === -->
+        <div v-if="isLoggedIn && tab === 'home'" class="absolute top-0 left-0 right-0 z-30 header-bar transition-all">
+            <div class="px-4 pt-12 pb-3 flex items-center justify-between"> 
+                <div class="flex items-center space-x-3">
+                    <div @click="openModal('showCityPicker')" class="flex items-center text-sm font-medium cursor-pointer hover:opacity-100 transition-opacity opacity-90">
+                        <i class="ri-map-pin-2-fill mr-1 text-secondary"></i> {{ filter.city || '全国' }} <i class="ri-arrow-down-s-fill ml-1 opacity-50"></i>
+                    </div>
+                    <div class="w-px h-4 bg-white/20"></div>
+                    <div @click="openModal('showCarPicker')" class="flex items-center text-sm font-medium cursor-pointer hover:opacity-100 transition-opacity opacity-90">
+                        {{ filter.carType || '全部车型' }} <i class="ri-filter-3-line ml-1 opacity-50"></i>
+                    </div>
+                </div>
+                <div class="relative cursor-pointer" @click="goToMessages">
+                    <i class="ri-notification-3-line text-xl"></i>
+                    <span v-if="unreadCount > 0" class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                </div>
+            </div>
+            <div class="px-4 pb-4">
+                <div class="h-10 bg-white/10 border border-white/10 rounded-lg flex items-center px-3 text-white/60 text-sm backdrop-blur-sm">
+                    <i class="ri-search-line mr-2"></i> 
+                    <input v-model="searchQuery" class="bg-transparent w-full outline-none placeholder-white/40 text-white" placeholder="搜索车牌 / 品牌 / 城市">
+                </div>
+            </div>
+        </div>
+
+        <!-- === 主内容区 === -->
+        <div v-if="isLoggedIn" class="flex-1 overflow-y-auto no-scrollbar relative pt-[135px] pb-24 px-4 space-y-3 bg-[#F5F5F9]">
+            
+            <!-- 1. 首页大厅 -->
+            <div v-if="tab === 'home'" class="pt-2">
+                <div class="bg-white rounded-lg p-3 flex items-center justify-between shadow-sm mb-3 border-l-4 border-secondary">
+                    <div class="flex items-center gap-2">
+                        <i class="ri-volume-up-fill text-secondary"></i>
+                        <div class="text-xs text-gray-600">
+                            <div class="font-bold">平台交易规则更新</div>
+                            <div>发布/报价需缴纳 ¥50 保证金，成交立退</div>
+                        </div>
+                    </div>
+                    <i class="ri-arrow-right-s-line text-gray-300"></i>
+                </div>
+
+                <div v-for="(t, i) in filteredList" :key="i" @click="goDetail(t)" 
+                     class="card p-4 relative overflow-hidden active:bg-gray-50 mb-3">
+                    
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center gap-2 max-w-[70%]">
+                            <span class="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 rounded font-medium">{{t.city}}</span>
+                            <span v-if="t.plateNo" class="bg-blue-100 text-primary text-[10px] px-1.5 py-0.5 rounded font-mono font-bold">{{t.plateNo}}</span>
+                            <h3 class="text-sm font-bold text-slate-800 truncate">{{t.title}}</h3>
+                        </div>
+                        <span class="text-[10px] text-gray-400 font-mono">{{t.time}} 截止</span>
+                    </div>
+
+                    <div class="flex items-center justify-between mt-3">
+                         <div class="flex items-center gap-3">
+                             <div class="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center text-primary text-xl border border-gray-100">
+                                 <i :class="t.icon"></i>
+                             </div>
+                             <div class="flex flex-col">
+                                 <div class="flex items-center gap-1">
+                                     <span class="text-xs text-gray-500">{{t.users}}人竞价</span>
+                                     <span v-if="t.isMine" class="text-[9px] text-white bg-primary px-1.5 rounded">我发布的</span>
+                                     <span v-if="t.status === 'quoted'" class="text-[9px] text-white bg-green-500 px-1.5 rounded">已报价</span>
+                                 </div>
+                             </div>
+                         </div>
+                         <div class="text-right">
+                             <div class="text-[10px] text-gray-400">参考/最优</div>
+                             <div v-if="t.isMine" class="text-secondary font-bold font-num text-lg">¥ {{ getLowestBid(t) }}</div>
+                             <div v-else-if="t.status === 'quoted'" class="text-green-600 font-bold font-num text-lg">¥ {{t.myQuote}}</div>
+                             <div v-else class="text-gray-300 font-bold text-sm">等待报价</div>
+                         </div>
+                    </div>
+                    
+                    <div class="mt-3 pt-3 border-t border-gray-50 flex justify-between items-center">
+                        <div class="text-[10px] text-gray-400">{{t.date}} 发布</div>
+                        <button v-if="t.isMine" class="bg-white border border-gray-300 text-gray-600 text-xs px-3 py-1 rounded-full relative">
+                            查看竞标 <span v-if="t.hasNewBid" class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                        </button>
+                        <button v-else-if="t.status!=='quoted'" class="px-4 py-1.5 rounded-full btn-primary text-xs font-bold shadow-sm">立即报价</button>
+                        <button v-else class="px-4 py-1.5 rounded-full bg-gray-100 text-gray-400 text-xs font-bold cursor-default">已交押金</button>
+                    </div>
+                </div>
+                
+                <div v-if="filteredList.length === 0" class="text-center py-10 text-gray-400 text-xs">暂无相关需求</div>
+            </div>
+
+            <!-- 2. 报价单 -->
+            <div v-if="tab === 'quotes'" class="-mt-[135px] pt-14">
+                <div class="bg-white sticky top-0 z-10 px-4 pt-3 pb-0 shadow-sm flex mb-4">
+                    <div @click="quoteTab='mine'" class="flex-1 text-center pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer" :class="quoteTab==='mine' ? 'border-primary text-primary' : 'border-transparent text-gray-400'">我发布的</div>
+                    <div @click="quoteTab='bids'" class="flex-1 text-center pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer" :class="quoteTab==='bids' ? 'border-primary text-primary' : 'border-transparent text-gray-400'">我参与的</div>
+                </div>
+                <div v-for="(t, i) in quoteList" :key="i" @click="goDetail(t)" class="card p-3 mb-2 mx-3 border-l-4" :class="statusColor(t.status)">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="font-bold text-sm text-gray-800">{{t.title}}</span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-500">{{ statusText(t.status) }}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs bg-gray-50 p-2 rounded">
+                        <span class="text-gray-500">{{t.plateNo}} | {{t.city}}</span>
+                        <span v-if="quoteTab==='mine'" class="text-secondary font-bold font-num">最低 ¥{{getLowestBid(t)}}</span>
+                        <span v-else class="text-primary font-bold font-num">我的报价 ¥{{t.myQuote}}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. 消息 -->
+            <div v-if="tab === 'messages'" class="-mt-[135px] pt-4 px-3">
+                <div class="text-lg font-bold px-1 mb-3 text-gray-800">消息通知</div>
+                <div class="card overflow-hidden">
+                    <div class="p-4 border-b border-gray-50 flex gap-3 items-start hover:bg-gray-50" v-for="(msg, i) in messages" :key="i">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0" :class="msg.type === 'money' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-primary'">
+                             <i :class="msg.type === 'money' ? 'ri-money-cny-box-fill' : 'ri-notification-badge-fill'"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-bold text-sm text-gray-800">{{msg.title}}</span>
+                                <span class="text-[10px] text-gray-400">{{msg.time}}</span>
+                            </div>
+                            <div class="text-xs text-gray-500 truncate">{{msg.content}}</div>
+                        </div>
+                    </div>
+                    <div v-if="messages.length === 0" class="text-center py-10 text-gray-400 text-xs">暂无新消息</div>
+                </div>
+            </div>
+
+            <!-- 4. 我的 -->
+            <div v-if="tab === 'mine'" class="-mt-[135px] pt-0">
+                <div class="bg-gradient-to-r from-gray-800 to-gray-900 pt-24 pb-16 px-6 rounded-b-[30px] shadow-lg text-[#EAD6A3]">
+                    <div class="flex items-center gap-4">
+                        <div class="w-16 h-16 rounded-full border-2 border-[#EAD6A3] bg-gray-800 flex items-center justify-center text-[#EAD6A3] text-2xl font-bold">
+                            {{ loginForm.phone.slice(-4) }}
+                        </div>
+                        <div>
+                            <div class="text-lg font-bold flex items-center gap-2">{{loginForm.phone}} <span class="bg-[#EAD6A3] text-black text-[10px] px-2 py-0.5 rounded font-bold">已认证</span></div>
+                            <div class="text-xs opacity-70 mt-1 cursor-pointer" @click="openModal('showCreditRule')">信用分: {{creditScore}} (查看规则)</div>
+                        </div>
+                        <div class="ml-auto text-center" @click="openSub('topup')">
+                            <div class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center mb-1 mx-auto"><i class="ri-add-line"></i></div>
+                            <div class="text-[10px] opacity-80">充值</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mx-4 -mt-8 p-4 flex justify-between text-center relative z-10">
+                    <div class="flex-1 border-r border-gray-100">
+                        <div class="font-num text-xl font-bold text-gray-800">{{balance}}</div>
+                        <div class="text-[10px] text-gray-500 mt-1">可用余额</div>
+                    </div>
+                    <div class="flex-1" @click="openSub('funds')">
+                        <div class="font-num text-xl font-bold text-gray-400">{{frozenAmount}}</div>
+                        <div class="text-[10px] text-gray-400 mt-1">交易冻结</div>
+                    </div>
+                </div>
+
+                <div class="card mx-4 mt-4 overflow-hidden">
+                    <div class="p-4 border-b border-gray-50 flex items-center justify-between active:bg-gray-50 cursor-pointer" @click="openSub('topup')">
+                        <div class="flex items-center gap-3"><i class="ri-wallet-3-line text-lg text-green-500"></i><span class="text-sm text-gray-700">账户充值 (人工)</span></div>
+                        <i class="ri-arrow-right-s-line text-gray-300"></i>
+                    </div>
+                    <div class="p-4 border-b border-gray-50 flex items-center justify-between active:bg-gray-50 cursor-pointer" @click="openSub('withdraw')">
+                        <div class="flex items-center gap-3"><i class="ri-bank-card-line text-lg text-primary"></i><span class="text-sm text-gray-700">余额提现</span></div>
+                        <span class="text-xs text-gray-400">满100起提 <i class="ri-arrow-right-s-line"></i></span>
+                    </div>
+                    <div class="p-4 border-b border-gray-50 flex items-center justify-between active:bg-gray-50 cursor-pointer" @click="openSub('feedback')">
+                        <div class="flex items-center gap-3"><i class="ri-feedback-line text-lg text-secondary"></i><span class="text-sm text-gray-700">意见反馈</span></div>
+                        <i class="ri-arrow-right-s-line text-gray-300"></i>
+                    </div>
+                    <div class="p-4 flex items-center justify-between active:bg-gray-50 cursor-pointer" @click="clearCache">
+                        <div class="flex items-center gap-3"><i class="ri-delete-bin-line text-lg text-red-500"></i><span class="text-sm text-gray-700">清除缓存</span></div>
+                    </div>
+                </div>
+                
+                <button @click="logout" class="mx-4 mt-6 w-[calc(100%-2rem)] h-12 border border-gray-300 text-gray-600 rounded-lg bg-white font-bold">退出登录</button>
+            </div>
+        </div>
+
+        <!-- === 底部导航 === -->
+        <div v-if="isLoggedIn && !sub" class="absolute bottom-0 left-0 right-0 h-[60px] bg-white border-t border-gray-100 flex items-end justify-between px-2 pb-1 z-40">
+            <div @click="tab='home'" class="flex-1 flex flex-col items-center py-1 cursor-pointer" :class="tab==='home'?'text-primary':'text-gray-400'">
+                <i class="text-2xl mb-0.5" :class="tab==='home'?'ri-home-fill':'ri-home-line'"></i><span class="text-[10px] scale-90">大厅</span>
+            </div>
+            <div @click="tab='quotes'" class="flex-1 flex flex-col items-center py-1 cursor-pointer" :class="tab==='quotes'?'text-primary':'text-gray-400'">
+                <i class="text-2xl mb-0.5" :class="tab==='quotes'?'ri-file-list-fill':'ri-file-list-line'"></i><span class="text-[10px] scale-90">报价单</span>
+            </div>
+            
+            <div class="w-16 relative h-full flex justify-center cursor-pointer" @click="openSub('publish')">
+                <div class="fab-btn"><i class="ri-add-line"></i></div>
+                <span class="text-[10px] text-gray-400 absolute bottom-1 scale-90">发布</span>
+            </div>
+
+            <div @click="tab='messages'" class="flex-1 flex flex-col items-center py-1 cursor-pointer" :class="tab==='messages'?'text-primary':'text-gray-400'">
+                <i class="text-2xl mb-0.5" :class="tab==='messages'?'ri-message-3-fill':'ri-message-3-line'"></i><span class="text-[10px] scale-90">消息</span>
+            </div>
+            <div @click="tab='mine'" class="flex-1 flex flex-col items-center py-1 cursor-pointer" :class="tab==='mine'?'text-primary':'text-gray-400'">
+                <i class="text-2xl mb-0.5" :class="tab==='mine'?'ri-user-smile-fill':'ri-user-smile-line'"></i><span class="text-[10px] scale-90">我的</span>
+            </div>
+        </div>
+
+        <!-- === 弹窗集合 === -->
+        <transition name="slide-up"><div v-if="showCityPicker" class="fixed inset-0 z-[60] bg-black/60 flex flex-col" @click="goBack"><div class="mt-auto h-[85vh] bg-white rounded-t-2xl flex flex-col overflow-hidden" @click.stop><div class="p-4 border-b bg-gray-50 flex justify-between items-center"><span class="font-bold">切换城市</span><i class="ri-close-line text-xl cursor-pointer" @click="goBack"></i></div><div class="p-3 border-b"><input v-model="citySearchQuery" class="w-full h-9 bg-gray-100 rounded px-3 text-sm outline-none" placeholder="搜索城市名称..."></div><div class="flex-1 flex overflow-hidden"><div class="w-24 bg-gray-50 overflow-y-auto"><div v-for="(prov, idx) in filteredCityData" :key="idx" @click="curProvIdx=idx" class="h-12 flex items-center justify-center text-sm border-b border-gray-100" :class="curProvIdx===idx?'bg-white text-primary font-bold border-l-4 border-l-primary':'text-gray-500'">{{prov.name}}</div></div><div class="flex-1 overflow-y-auto p-4"><div class="grid grid-cols-2 gap-3"><div v-for="city in filteredCityData[curProvIdx]?.cities" :key="city" @click="selectCity(city)" class="h-10 border rounded flex items-center justify-center text-sm active:bg-blue-50 cursor-pointer">{{city}}</div></div></div></div></div></div></transition>
+
+        <transition name="slide-up"><div v-if="showCarPicker" class="fixed inset-0 z-[60] bg-black/60 flex flex-col justify-end" @click="goBack"><div class="bg-white rounded-t-2xl max-h-[85vh] p-4 pb-10 overflow-y-auto" @click.stop><div class="font-bold mb-4 flex justify-between"><span>筛选车型</span><span class="text-primary text-sm font-normal cursor-pointer" @click="resetCarFilter">重置</span></div><div v-for="(cat,idx) in carCategories" :key="idx" class="mb-4"><div class="text-xs text-gray-500 mb-2 font-bold">{{cat.name}}</div><div class="flex flex-wrap gap-2"><div v-for="type in cat.types" :key="type" @click="confirmCarFilter(type)" class="px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs active:bg-blue-50 active:border-primary cursor-pointer">{{type}}</div></div></div></div></div></transition>
+
+        <transition name="slide-up">
+            <div v-if="sub === 'publish'" class="fixed inset-0 z-50 bg-[#F5F5F9] flex flex-col">
+                <div class="h-12 bg-white flex items-center px-4 shadow-sm shrink-0"><i class="ri-close-line text-2xl text-gray-600" @click="goBack"></i><span class="mx-auto font-bold">发布需求</span><div class="w-6"></div></div>
+                <div class="flex-1 overflow-y-auto p-4 space-y-3 pb-32">
+                    <div class="card p-4">
+                        <div class="flex justify-between items-center mb-3"><div class="text-sm font-bold border-l-4 border-primary pl-2">证件扫描 (自动识别)</div></div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div @click="triggerUpload('license_front')" class="aspect-[3/2] border-2 border-dashed border-blue-200 rounded-lg bg-blue-50/50 flex flex-col items-center justify-center text-primary relative overflow-hidden"><img v-if="uploadImages.license_front" :src="uploadImages.license_front" class="w-full h-full object-cover"><template v-else><i class="ri-steering-2-line text-2xl"></i><span class="text-xs mt-1">行驶证正页</span></template></div>
+                            <div @click="triggerUpload('license_back')" class="aspect-[3/2] border-2 border-dashed border-blue-200 rounded-lg bg-blue-50/50 flex flex-col items-center justify-center text-primary relative overflow-hidden"><img v-if="uploadImages.license_back" :src="uploadImages.license_back" class="w-full h-full object-cover"><template v-else><i class="ri-file-text-line text-2xl"></i><span class="text-xs mt-1">副页</span></template></div>
+                            <div @click="triggerUpload('id_front')" class="aspect-[3/2] border-2 border-dashed border-blue-200 rounded-lg bg-blue-50/50 flex flex-col items-center justify-center text-primary relative overflow-hidden"><img v-if="uploadImages.id_front" :src="uploadImages.id_front" class="w-full h-full object-cover"><template v-else><i class="ri-id-card-line text-2xl"></i><span class="text-xs mt-1">身份证正面</span></template></div>
+                            <div @click="triggerUpload('id_back')" class="aspect-[3/2] border-2 border-dashed border-blue-200 rounded-lg bg-blue-50/50 flex flex-col items-center justify-center text-primary relative overflow-hidden"><img v-if="uploadImages.id_back" :src="uploadImages.id_back" class="w-full h-full object-cover"><template v-else><i class="ri-bank-card-2-line text-2xl"></i><span class="text-xs mt-1">反面</span></template></div>
+                        </div>
+                        <input v-for="k in Object.keys(uploadImages)" :key="k" type="file" :ref="'file_'+k" class="hidden" accept="image/*" @change="handleFileChange($event, k)">
+                    </div>
+                    <div class="card p-4 space-y-4">
+                        <div class="flex items-center border-b border-gray-100 pb-2"><span class="w-20 text-sm text-gray-500">车牌号码</span><span class="text-primary font-bold mr-2 text-sm" @click="showProvinceKeyboard=true">{{form.platePrefix}} <i class="ri-arrow-down-s-fill text-xs"></i></span><input v-model="form.plateNo" class="flex-1 outline-none uppercase font-bold" placeholder="88888"></div>
+                        <div class="flex items-center border-b border-gray-100 pb-2"><span class="w-20 text-sm text-gray-500">投保城市</span><input v-model="form.city" class="flex-1 outline-none text-sm" placeholder="自动读取或手动输入"></div>
+                        <div class="flex items-center border-b border-gray-100 pb-2"><span class="w-20 text-sm text-gray-500">品牌车型</span><input v-model="form.title" class="flex-1 outline-none text-sm" placeholder="如: 奥迪A6L"></div>
+                        <div class="flex items-center"><span class="w-20 text-sm text-gray-500">业务类型</span><div class="flex gap-2"><label class="flex items-center gap-1 cursor-pointer radio-box"><input type="radio" name="bizType" class="hidden" checked><div class="px-3 py-1 bg-gray-100 rounded text-xs">转保</div></label><label class="flex items-center gap-1 cursor-pointer radio-box"><input type="radio" name="bizType" class="hidden"><div class="px-3 py-1 bg-gray-100 rounded text-xs">续保</div></label><label class="flex items-center gap-1 cursor-pointer radio-box"><input type="radio" name="bizType" class="hidden"><div class="px-3 py-1 bg-gray-100 rounded text-xs">新车</div></label></div></div>
+                    </div>
+                    <div class="card p-4 flex justify-between items-center"><div class="text-sm font-bold border-l-4 border-secondary pl-2">期望费用</div><div class="relative w-32"><span class="absolute left-2 top-2 text-gray-500 font-bold">¥</span><input v-model.number="form.price" type="number" class="w-full h-9 bg-gray-100 pl-6 rounded outline-none font-bold text-lg text-right pr-2" placeholder="0"></div></div>
+                </div>
+                <div class="p-4 bg-white border-t border-gray-100 pb-safe"><button @click="initiatePayment('publish')" class="w-full h-12 btn-primary rounded-lg font-bold shadow-lg">支付 ¥50 保证金并发布</button></div>
+            </div>
+        </transition>
+
+        <transition name="slide-up">
+            <div v-if="sub === 'detail'" class="fixed inset-0 z-50 bg-[#F5F5F9] flex flex-col">
+                <div class="header-bar h-12 flex items-center px-4 shrink-0 shadow-md"><i class="ri-arrow-left-line text-xl cursor-pointer" @click="goBack"></i><span class="mx-auto font-bold">需求详情</span><div class="text-xs opacity-80 cursor-pointer" @click="openDispute">投诉</div></div>
+                <div class="flex-1 overflow-y-auto pb-safe p-3 space-y-3">
+                    <div class="card p-4">
+                        <div class="flex justify-between items-start"><h1 class="text-lg font-bold text-gray-800">{{cur.title}}</h1><span class="text-secondary font-bold">{{ statusText(cur.status) }}</span></div>
+                        <div class="flex gap-2 text-xs text-gray-500 mt-2"><span class="bg-gray-100 px-1 rounded">{{cur.plateNo}}</span><span>{{cur.city}}</span><span>{{cur.date}}</span></div>
+                    </div>
+                    <div v-if="!cur.isMine" class="card p-4">
+                        <div class="text-sm font-bold mb-2 text-gray-700">客户资料 (点击查看)</div>
+                        <div class="grid grid-cols-4 gap-2"><div v-for="(img, k) in cur.images" :key="k" class="aspect-square bg-gray-100 rounded flex items-center justify-center overflow-hidden cursor-pointer" @click="openPreview(img)"><img v-if="img" :src="img" class="w-full h-full object-cover filter blur-[2px] hover:blur-0 transition-all"><i v-else class="ri-image-line text-gray-400"></i></div></div>
+                    </div>
+                    <div v-if="cur.isMine" class="pb-10">
+                        <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-gray-700 text-sm">竞标列表 ({{cur.bidders ? cur.bidders.length : 0}})</h3><div class="text-xs text-primary cursor-pointer" @click="demoSimulateBids">模拟报价(演示)</div></div>
+                        <div v-if="!cur.bidders || cur.bidders.length === 0" class="text-center py-10 text-gray-400 text-xs">暂无报价</div>
+                        <div v-else class="space-y-3"><div v-for="(bid, idx) in cur.bidders" :key="idx" class="card p-3"><div class="flex justify-between items-center mb-2"><div><div class="font-bold text-gray-800 text-base">¥ {{bid.amount}}</div><div class="text-[10px] text-gray-500 mt-0.5">{{bid.name}}</div></div><button @click="initiateDeal(bid)" class="btn-primary text-white text-[10px] px-3 py-1.5 rounded-lg font-bold">选定成交</button></div><div class="text-[10px] text-gray-500 bg-gray-50 p-2 rounded flex gap-2"><span>交强:{{bid.details.jq}}</span><span>商业:{{bid.details.sy}}</span><span>加费:{{bid.details.fee}}</span></div></div></div>
+                        <button @click="cancelOrder(cur)" class="w-full mt-6 h-10 border border-red-200 text-red-500 rounded text-sm bg-white">取消订单 (退押金)</button>
+                    </div>
+                    <div v-else>
+                         <div v-if="cur.status === 'quoted'" class="bg-green-50 border border-green-100 rounded-lg p-4 text-center"><i class="ri-check-double-line text-2xl text-green-500"></i><div class="font-bold text-green-700 mt-1">已报价 ¥{{myQuotePrice}}</div><div class="text-xs text-gray-400">请等待车主选标</div></div>
+                         <div v-else class="card p-4"><div class="text-sm font-bold mb-3">填写报价方案</div><div class="grid grid-cols-3 gap-2 mb-4"><div class="bg-white rounded-lg px-1 py-2 text-center border border-gray-200"><div class="text-[10px] text-gray-400 mb-1">交强</div><input v-model.number="quoteForm.jq" type="number" class="w-full font-num font-bold text-sm bg-transparent outline-none text-center" placeholder="0"></div><div class="bg-white rounded-lg px-1 py-2 text-center border border-gray-200"><div class="text-[10px] text-gray-400 mb-1">商业</div><input v-model.number="quoteForm.sy" type="number" class="w-full font-num font-bold text-sm bg-transparent outline-none text-center" placeholder="0"></div><div class="bg-white rounded-lg px-1 py-2 text-center border border-indigo-100"><div class="text-[10px] text-primary mb-1 font-bold">加费</div><input v-model.number="quoteForm.fee" type="number" class="w-full font-num font-bold text-sm bg-transparent outline-none text-center text-primary" placeholder="0"></div></div><button @click="initiatePayment('bid')" class="w-full h-10 btn-secondary rounded font-bold text-sm shadow-md">支付 ¥50 保证金报价</button></div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <transition name="slide-up"><div v-if="showProvinceKeyboard" class="fixed inset-0 z-[60] bg-black/40 flex flex-col justify-end" @click="showProvinceKeyboard=false"><div class="bg-gray-100 p-2 pb-safe" @click.stop><div class="grid grid-cols-8 gap-1 mb-2"><div v-for="p in provinces" :key="p" @click="selectProvince(p)" class="bg-white rounded h-10 flex items-center justify-center text-lg shadow-sm active:bg-gray-200">{{p}}</div></div></div></div></transition>
+        <transition name="fade"><div v-if="showImagePreview" class="fixed inset-0 z-[80] bg-black flex flex-col items-center justify-center p-4" @click="showImagePreview=false"><div class="absolute top-4 right-4 text-white text-3xl cursor-pointer z-50"><i class="ri-close-circle-line"></i></div><img v-if="previewImageUrl" :src="previewImageUrl" class="max-w-full max-h-full object-contain relative z-10"><div v-else class="text-white">图片已过期</div><div class="watermark z-20"></div></div></transition>
+        
+        <!-- 支付收银台 (修复: 增加余额不足提示 + 按钮分流) -->
+        <transition name="slide-up">
+            <div v-if="showPay" class="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex flex-col justify-end" @click="closeModal('showPay')">
+                <div class="bg-white rounded-t-2xl p-6 pb-safe" @click.stop>
+                    <div class="text-center mb-6 relative">
+                        <span class="font-bold text-lg">收银台</span>
+                        <div class="absolute right-0 top-0 p-2 -mt-2 -mr-2 cursor-pointer text-gray-400" @click="closeModal('showPay')">
+                            <i class="ri-close-line text-2xl"></i>
+                        </div>
+                    </div>
+                    <div class="text-center mb-8">
+                        <div class="text-sm text-gray-400">{{payTitle}}</div>
+                        <div class="text-4xl font-bold font-num mt-1">¥ {{payAmount}}.00</div>
+                        <div v-if="balance < payAmount" class="text-xs text-red-500 mt-2 flex items-center justify-center gap-1">
+                            <i class="ri-error-warning-fill"></i> 余额不足 (当前 ¥{{balance}})
+                        </div>
+                    </div>
+                    
+                    <div v-if="balance >= payAmount">
+                         <button @click="processPayment" class="w-full h-12 btn-primary rounded-lg font-bold text-lg">确认支付</button>
+                    </div>
+                    <div v-else class="space-y-3">
+                         <button @click="switchToTopup" class="w-full h-12 btn-primary rounded-lg font-bold text-lg">去充值</button>
+                         <button @click="closeModal('showPay')" class="w-full h-12 border border-gray-200 text-gray-500 rounded-lg font-bold text-lg bg-white">取消支付</button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <transition name="slide-up"><div v-if="sub === 'topup'" class="fixed inset-0 z-50 bg-white flex flex-col"><div class="h-12 flex items-center px-4 border-b border-gray-100"><i class="ri-arrow-left-line text-xl" @click="goBack"></i><span class="mx-auto font-bold">转账充值</span></div><div class="p-6 text-center"><div class="text-sm text-gray-500 mb-4">请转账至管理员账户，并提交截图凭证</div><div class="bg-blue-500 text-white p-6 rounded-xl shadow-lg mb-6 w-64 mx-auto"><div class="text-center"><i class="ri-alipay-fill text-5xl"></i><div class="text-sm font-bold mt-2">管理员账号</div><div class="text-xs">admin@chexian.com</div></div></div><div class="mb-4 text-left text-sm font-bold text-gray-700">上传凭证</div><div class="h-32 border-2 border-dashed rounded flex flex-col items-center justify-center bg-gray-50" @click="$refs.topupProof.click()"><img v-if="topupProofImg" :src="topupProofImg" class="h-full object-cover"><span v-else class="text-xs text-gray-400">点击上传截图</span></div><input type="file" ref="topupProof" class="hidden" accept="image/*" @change="handleTopupProof"><button @click="submitTopupReview" class="w-full h-12 btn-primary rounded-lg font-bold mt-6">已转账，提交审核</button></div></div></transition>
+        <transition name="slide-up"><div v-if="sub === 'withdraw'" class="fixed inset-0 z-50 bg-white flex flex-col"><div class="h-12 flex items-center px-4 border-b border-gray-100"><i class="ri-arrow-left-line text-xl" @click="goBack"></i><span class="mx-auto font-bold">余额提现</span></div><div class="p-6"><div class="text-gray-500 text-sm">可提现余额</div><div class="text-4xl font-bold text-gray-800 mb-6">¥ {{balance}}</div><div class="space-y-4"><input v-model.number="withdrawAmount" type="number" class="w-full h-12 border border-gray-200 rounded px-3" placeholder="金额 (最低100)"><input v-model="withdrawAccount" type="text" class="w-full h-12 border border-gray-200 rounded px-3" placeholder="收款支付宝账号"><button @click="doWithdraw" class="w-full h-12 btn-primary rounded-lg font-bold">提交申请</button></div></div></div></transition>
+        <div v-if="sub === 'funds'" class="fixed inset-0 z-50 bg-white flex flex-col"><div class="h-12 flex items-center px-4 border-b"><i class="ri-arrow-left-line text-xl" @click="goBack"></i><span class="mx-auto font-bold">资金明细</span></div><div class="flex-1 p-4"><div v-for="f in fundList" class="flex justify-between py-3 border-b"><span>{{f.title}}</span><span :class="f.amount>0?'text-green-600':'text-red-600'">{{f.amount}}</span></div></div></div>
+        <transition name="slide-up"><div v-if="showDisputeModal" class="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-6"><div class="bg-white rounded-xl w-full p-5"><div class="font-bold text-lg mb-4 text-red-600">发起纠纷投诉</div><textarea v-model="disputeReason" class="w-full h-24 border border-gray-200 rounded-lg p-3 text-sm mb-4" placeholder="请详细描述问题..."></textarea><div class="flex gap-3"><button @click="showDisputeModal=false" class="flex-1 h-10 border rounded text-sm">取消</button><button @click="submitDispute" class="flex-1 h-10 bg-red-600 text-white rounded text-sm">提交维权</button></div></div></div></transition>
+        
+        <!-- 信用规则弹窗 (修复: 内容完善) -->
+        <transition name="slide-up">
+            <div v-if="showCreditRule" class="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-6" @click="showCreditRule=false">
+                <div class="bg-white rounded-2xl w-full max-h-[70vh] flex flex-col overflow-hidden" @click.stop>
+                    <div class="p-4 border-b border-gray-100 text-center font-bold text-lg">信用评分规则</div>
+                    <div class="flex-1 overflow-y-auto p-5 text-sm text-gray-600 space-y-4">
+                        <div>
+                            <div class="font-bold text-gray-800 mb-2 flex items-center"><i class="ri-shield-user-line text-primary mr-1"></i> 基础分</div>
+                            <div class="flex justify-between py-1 border-b border-gray-50"><span>实名认证通过</span><span class="font-bold text-primary">100分</span></div>
+                        </div>
+                        <div>
+                            <div class="font-bold text-gray-800 mb-2 flex items-center"><i class="ri-add-circle-line text-green-600 mr-1"></i> 加分项</div>
+                            <div class="flex justify-between py-1 border-b border-gray-50"><span>交易成交</span><span class="font-bold text-green-600">+1分/单</span></div>
+                            <div class="flex justify-between py-1 border-b border-gray-50"><span>获得好评</span><span class="font-bold text-green-600">+2分/次</span></div>
+                        </div>
+                        <div>
+                            <div class="font-bold text-gray-800 mb-2 flex items-center"><i class="ri-indeterminate-circle-line text-red-500 mr-1"></i> 扣分项</div>
+                            <div class="flex justify-between py-1 border-b border-gray-50"><span>恶意报价</span><span class="font-bold text-red-500">-10分</span></div>
+                            <div class="flex justify-between py-1 border-b border-gray-50"><span>违约拒单</span><span class="font-bold text-red-500">-20分</span></div>
+                            <div class="flex justify-between py-1 border-b border-gray-50"><span>纠纷败诉</span><span class="font-bold text-red-500">-50分</span></div>
+                        </div>
+                        <div class="bg-gray-50 p-2 rounded text-xs text-gray-500">
+                            * 信用分低于80将限制接单；低于60将封号。
+                        </div>
+                    </div>
+                    <div class="p-4 border-t border-gray-100">
+                        <button class="w-full h-10 btn-primary rounded-lg text-sm" @click="showCreditRule=false">我知道了</button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <transition name="fade"><div v-if="toastMsg" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/80 text-white px-6 py-3 rounded-full z-[100] text-sm">{{toastMsg}}</div></transition>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        createApp({
+            data() {
+                return {
+                    // ... existing data ...
+                    isLoggedIn: false, isLoggingIn: false, loginStep: 'form', myId: 'user_123',
+                    tab: 'home', sub: null, quoteTab: 'mine', cur: {}, toastMsg: '', showGuide: false, guideStep: 1,
+                    
+                    showCityPicker: false, showCarPicker: false, showPay: false, paying: false, showDisputeModal: false, showProvinceKeyboard: false, showImagePreview: false, showCreditRule: false,
+                    filter: { city: '', carType: '' }, searchQuery: '', citySearchQuery: '',
+                    
+                    payReason: '', payAmount: 0, payTitle: '', balance: 0, frozenAmount: 0, creditScore: 100,
+                    quoteForm: { jq: '', sy: '', fee: '' }, myQuotePrice: null, quoteInput: '', disputeReason: '',
+                    form: { prov: '', city: '', title: '', price: '', platePrefix: '沪', plateNo: '', insurances: {jq:true, sy:false, sy_amt:'200万', cs:false} },
+                    loginForm: { phone: '', licenseImg: '' }, uploadImages: {}, previewImageUrl: '', topupProofImg: '',
+                    currentUploadKey: '',
+                    
+                    provinces: ['京','津','沪','渝','冀','豫','云','辽','黑','湘','皖','鲁','新','苏','浙','赣','鄂','桂','甘','晋','蒙','陕','吉','闽','贵','粤','青','藏','川','宁','琼'],
+                    curProvIdx: 0,
+                    
+                    // === 全量城市数据 (完整版) ===
+                    cityData: [
+                        { name: '直辖市', cities: ['北京','上海','天津','重庆'] },
+                        { name: '浙江', cities: ['杭州','宁波','温州','嘉兴','湖州','绍兴','金华','衢州','舟山','台州','丽水'] },
+                        { name: '江苏', cities: ['南京','无锡','徐州','常州','苏州','南通','连云港','淮安','盐城','扬州','镇江','泰州','宿迁'] },
+                        { name: '广东', cities: ['广州','深圳','珠海','汕头','韶关','佛山','江门','湛江','茂名','肇庆','惠州','梅州','汕尾','河源','阳江','清远','东莞','中山','潮州','揭阳','云浮'] },
+                        { name: '山东', cities: ['济南','青岛','淄博','枣庄','东营','烟台','潍坊','济宁','泰安','威海','日照','临沂','德州','聊城','滨州','菏泽'] },
+                        { name: '河北', cities: ['石家庄','唐山','秦皇岛','邯郸','邢台','保定','张家口','承德','沧州','廊坊','衡水'] },
+                        { name: '山西', cities: ['太原','大同','阳泉','长治','晋城','朔州','晋中','运城','忻州','临汾','吕梁'] },
+                        { name: '辽宁', cities: ['沈阳','大连','鞍山','抚顺','本溪','丹东','锦州','营口','阜新','辽阳','盘锦','铁岭','朝阳','葫芦岛'] },
+                        { name: '吉林', cities: ['长春','吉林','四平','辽源','通化','白山','松原','白城','延边'] },
+                        { name: '黑龙江', cities: ['哈尔滨','齐齐哈尔','鸡西','鹤岗','双鸭山','大庆','伊春','佳木斯','七台河','牡丹江','黑河','绥化','大兴安岭'] },
+                        { name: '安徽', cities: ['合肥','芜湖','蚌埠','淮南','马鞍山','淮北','铜陵','安庆','黄山','滁州','阜阳','宿州','六安','亳州','池州','宣城'] },
+                        { name: '福建', cities: ['福州','厦门','莆田','三明','泉州','漳州','南平','龙岩','宁德'] },
+                        { name: '江西', cities: ['南昌','景德镇','萍乡','九江','新余','鹰潭','赣州','吉安','宜春','抚州','上饶'] },
+                        { name: '河南', cities: ['郑州','开封','洛阳','平顶山','安阳','鹤壁','新乡','焦作','濮阳','许昌','漯河','三门峡','南阳','商丘','信阳','周口','驻马店','济源'] },
+                        { name: '湖北', cities: ['武汉','黄石','十堰','宜昌','襄阳','鄂州','荆门','孝感','荆州','黄冈','咸宁','随州','恩施'] },
+                        { name: '湖南', cities: ['长沙','株洲','湘潭','衡阳','邵阳','岳阳','常德','张家界','益阳','郴州','永州','怀化','娄底','湘西'] },
+                        { name: '海南', cities: ['海口','三亚','三沙','儋州'] },
+                        { name: '四川', cities: ['成都','自贡','攀枝花','泸州','德阳','绵阳','广元','遂宁','内江','乐山','南充','眉山','宜宾','广安','达州','雅安','巴中','资阳','阿坝','甘孜','凉山'] },
+                        { name: '贵州', cities: ['贵阳','六盘水','遵义','安顺','毕节','铜仁','黔西南','黔东南','黔南'] },
+                        { name: '云南', cities: ['昆明','曲靖','玉溪','保山','昭通','丽江','普洱','临沧','楚雄','红河','文山','西双版纳','大理','德宏','怒江','迪庆'] },
+                        { name: '陕西', cities: ['西安','铜川','宝鸡','咸阳','渭南','延安','汉中','榆林','安康','商洛'] },
+                        { name: '甘肃', cities: ['兰州','嘉峪关','金昌','白银','天水','武威','张掖','平凉','酒泉','庆阳','定西','陇南','临夏','甘南'] },
+                        { name: '青海', cities: ['西宁','海东','海北','黄南','海南','果洛','玉树','海西'] },
+                        { name: '内蒙古', cities: ['呼和浩特','包头','乌海','赤峰','通辽','鄂尔多斯','呼伦贝尔','乌兰察布','巴彦淖尔','兴安盟','锡林郭勒盟','阿拉善盟'] },
+                        { name: '广西', cities: ['南宁','柳州','桂林','梧州','北海','防城港','钦州','贵港','玉林','百色','贺州','河池','来宾','崇左'] },
+                        { name: '西藏', cities: ['拉萨','日喀则','昌都','林芝','山南','那曲','阿里'] },
+                        { name: '宁夏', cities: ['银川','石嘴山','吴忠','固原','中卫'] },
+                        { name: '新疆', cities: ['乌鲁木齐','克拉玛依','吐鲁番','哈密','昌吉','博尔塔拉','巴音郭楞','阿克苏','克孜勒苏','喀什','和田','伊犁','塔城','阿勒泰'] },
+                        { name: '香港', cities: ['香港岛','九龙','新界'] },
+                        { name: '澳门', cities: ['澳门半岛','氹仔岛','路环岛'] },
+                        { name: '台湾', cities: ['台北','新北','桃园','台中','台南','高雄'] }
+                    ],
+
+                    // === 全量国标车型 (补完) ===
+                    carCategories: [
+                         { 
+                            name: '客车系列', 
+                            types: ['微型客车(≤1.0L)','小型客车(≤9人)','中型客车(10-19人)','大型客车(≥20人)','轿车','SUV','MPV']
+                         },
+                         { 
+                            name: '货车系列', 
+                            types: ['微型货车(≤1.8t)','轻型货车(1.8-6t)','中型货车(6-14t)','重型货车(≥14t)','低速货车','三轮汽车','仓栅式货车','厢式货车','罐式货车']
+                         },
+                         { 
+                            name: '特种车辆', 
+                            types: ['特种车一(油罐/气罐/液罐)','特种车二(起重/搅拌/泵车)','特种车三(救护/监测/冷藏)','特种车四(集装箱拖头)']
+                         },
+                         { 
+                            name: '摩托车/其他', 
+                            types: ['50CC及以下','50CC-250CC','250CC以上','侧三轮摩托','正三轮摩托','拖拉机','挂车','半挂车']
+                         }
+                    ],
+                    
+                    fundList: [], list: [], messages: [], unreadCount: 0
+                }
+            },
+            created() {
+                const saved = localStorage.getItem('industry_helper_final_v14');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    this.isLoggedIn = data.isLoggedIn; this.balance = data.balance; this.frozenAmount = data.frozenAmount;
+                    this.fundList = data.fundList || []; this.list = data.list.map(i=>({...i, images:{}})); 
+                    this.messages = data.messages || []; this.unreadCount = data.unreadCount || 0;
+                    if (this.isLoggedIn && !localStorage.getItem('has_seen_guide')) this.showGuide = true;
+                } else {
+                    this.list = [
+                        { id: 1, title: '奥迪 A6L 2023款', city: '上海', plateNo: '沪A88888', time: '23:59', users: 3, icon: 'ri-car-fill', bg: '#1677FF', isMine: true, status: 'normal', bidders: [], hasNewBid: false },
+                        { id: 2, title: '宝马 530Li', city: '北京', plateNo: '京A66666', time: '23:59', users: 0, icon: 'ri-roadster-fill', bg: '#FF6600', isMine: false, status: 'normal', bidders: [] }
+                    ];
+                }
+                window.addEventListener('popstate', this.handlePopState);
+            },
+            beforeUnmount() {
+                window.removeEventListener('popstate', this.handlePopState);
+            },
+            computed: {
+                quoteList() { return this.quoteTab === 'mine' ? this.list.filter(t => t.isMine) : this.list.filter(t => t.status !== 'normal' || t.myQuote); },
+                filteredList() {
+                    let res = this.list;
+                    if(this.filter.city && this.filter.city !== '全国') res = res.filter(t => t.city.includes(this.filter.city));
+                    if (this.searchQuery) {
+                        const q = this.searchQuery.toLowerCase();
+                        res = res.filter(t => t.title.toLowerCase().includes(q) || t.city.includes(q) || (t.plateNo && t.plateNo.toLowerCase().includes(q)));
+                    }
+                    return res;
+                },
+                filteredCityData() {
+                    if (!this.citySearchQuery) return this.cityData;
+                    const q = this.citySearchQuery;
+                    return this.cityData.filter(prov => prov.name.includes(q) || prov.cities.some(c => c.includes(q)));
+                }
+            },
+            methods: {
+                saveData() {
+                    const listToSave = this.list.map(item => { const { images, ...rest } = item; return rest; });
+                    localStorage.setItem('industry_helper_final_v14', JSON.stringify(this.$data));
+                },
+                showToast(msg) { this.toastMsg = msg; setTimeout(() => this.toastMsg = '', 2000); },
+                
+                // 导航修复核心
+                goBack() { 
+                    if(this.showImagePreview) this.showImagePreview = false;
+                    else if(this.showCityPicker) this.showCityPicker = false;
+                    else if(this.showCarPicker) this.showCarPicker = false;
+                    else if(this.showPay) this.showPay = false;
+                    else if(this.showDisputeModal) this.showDisputeModal = false;
+                    else if(this.showCreditRule) this.showCreditRule = false;
+                    else if(this.sub) this.sub = null;
+                },
+                closeModal(name) { this[name] = false; },
+                openModal(n) { this[n] = true; },
+                openSub(p) { 
+                    this.sub = p; 
+                    if(p==='publish') { this.form={plateNo:'', platePrefix:'沪', insurances:{jq:true, sy:false, sy_amt:'200万', cs:false}}; this.uploadImages={}; } 
+                    if(p==='topup') { this.topupProofImg = ''; }
+                },
+
+                // 业务逻辑
+                handleLicenseUpload(e) { 
+                    const file = e.target.files[0]; if(!file) return;
+                    const reader = new FileReader(); reader.onload = (e) => { this.loginForm.licenseImg = e.target.result; }; reader.readAsDataURL(file);
+                },
+                doLogin() {
+                    if(!this.loginForm.phone || !this.loginForm.licenseImg) return this.showToast('请上传执照并填写手机号');
+                    this.isLoggingIn = true;
+                    // 此处保留免审逻辑，方便演示
+                    setTimeout(() => { this.isLoggingIn = false; this.isLoggedIn = true; if(!localStorage.getItem('has_seen_guide')) this.showGuide = true; this.saveData(); }, 1000);
+                },
+                logout() { if(confirm('确定退出登录？')) { this.isLoggedIn = false; this.loginStep='form'; this.saveData(); } },
+                nextGuideStep() { if(this.guideStep<3) this.guideStep++; else { this.showGuide = false; localStorage.setItem('has_seen_guide','true'); } },
+
+                // 图片
+                triggerUpload(type) { 
+                    this.currentUploadKey = type;
+                    this.$refs.globalFileInput.click(); 
+                },
+                handleGlobalFileChange(e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        const type = this.currentUploadKey;
+                        const img = new Image();
+                        img.src = evt.target.result;
+                        img.onload = () => {
+                             const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                             const w = Math.min(img.width, 800); const h = img.height * (w/img.width);
+                             canvas.width = w; canvas.height = h; ctx.drawImage(img,0,0,w,h);
+                             const base64 = canvas.toDataURL('image/jpeg', 0.6);
+                             
+                             if (type === 'licenseImg') this.loginForm.licenseImg = base64;
+                             else if (type === 'topupProof') this.topupProofImg = base64;
+                             else if (type === 'proofUpload') {
+                                this.cur.proofImage = base64;
+                                this.cur.status = 'proof_uploaded';
+                                this.saveData();
+                             } else {
+                                this.uploadImages[type] = base64;
+                             }
+                             this.showToast('上传成功');
+                        };
+                        e.target.value = ''; 
+                    };
+                    reader.readAsDataURL(file);
+                },
+                // 兼容旧接口
+                handleFileChange(e, k) { this.currentUploadKey = k; this.handleGlobalFileChange(e); },
+                handleTopupProof(e) { this.currentUploadKey = 'topupProof'; this.handleGlobalFileChange(e); },
+                handleProofUpload(e) { this.currentUploadKey = 'proofUpload'; this.handleGlobalFileChange(e); },
+
+                openPreview(url) { if(url) { this.previewImageUrl = url; this.showImagePreview = true; } else this.showToast('暂无图片'); },
+
+                selectCity(city) { this.filter.city = city; this.closeModal('showCityPicker'); },
+                confirmCarFilter(type) { this.filter.carType = type; this.closeModal('showCarPicker'); },
+                resetCarFilter() { this.filter.carType = ''; this.closeModal('showCarPicker'); },
+                selectProvince(p) { this.form.platePrefix = p; this.showProvinceKeyboard = false; },
+                getLowestBid(t) { return t.bidders && t.bidders.length ? Math.min(...t.bidders.map(b=>b.amount)) : '待议'; },
+                addMessage(t, c) { this.messages.unshift({title:t, content:c, time:'刚刚'}); this.unreadCount++; this.saveData(); },
+                goToMessages() { this.tab = 'messages'; this.unreadCount = 0; this.saveData(); },
+                submitTopupReview() { if(!this.topupProofImg) return this.showToast('请上传凭证'); this.showToast('提交成功'); setTimeout(()=>{this.balance+=1000; this.fundList.unshift({title:'充值到账',amount:1000}); this.saveData();},2000); this.goBack(); },
+                doWithdraw() { this.balance-=this.withdrawAmount; this.fundList.unshift({title:'提现',amount:-this.withdrawAmount}); this.goBack(); this.saveData(); },
+                clearCache() { localStorage.removeItem('industry_helper_final_v14'); location.reload(); },
+                statusText(s) { const map={'normal':'竞价中','pending_proof':'待传凭证','proof_uploaded':'待验收','completed':'已完成','quoted':'已报价'}; return map[s]||s; },
+                statusColor(s) { if(s==='completed') return 'border-l-green-500'; if(s==='pending_proof') return 'border-l-yellow-500'; return 'border-l-blue-500'; },
+                switchToTopup() { this.showPay = false; this.openSub('topup'); },
+
+                // 资金
+                initiatePayment(reason, amount = 50) {
+                    this.payReason = reason; this.payAmount = amount; 
+                    this.payTitle = reason==='deal' ? '支付加费(托管)' : '保证金';
+                    this.showPay = true;
+                },
+                processPayment() {
+                    if (this.balance < this.payAmount) return this.showToast('余额不足');
+                    this.paying = true;
+                    setTimeout(() => {
+                        this.paying = false; this.showPay = false;
+                        this.balance -= this.payAmount; 
+                        
+                        if (this.payReason === 'publish') {
+                            this.frozenAmount += this.payAmount; 
+                            this.fundList.unshift({title: '押金冻结', amount: -this.payAmount});
+                            this.doPublish();
+                        } else if (this.payReason === 'bid') {
+                            this.frozenAmount += this.payAmount;
+                            this.fundList.unshift({title: '报价冻结', amount: -this.payAmount});
+                            this.doBid();
+                        } else if (this.payReason === 'deal') {
+                             this.fundList.unshift({title: '支付托管', amount: -this.payAmount});
+                             this.doConfirmDeal();
+                        }
+                        this.saveData();
+                    }, 1000);
+                },
+                
+                // 业务动作
+                doPublish() {
+                    const item = { id: Date.now(), title: this.form.title||'未知', city: this.form.city||'上海', plateNo: this.form.platePrefix+this.form.plateNo, time:'23:59', users:0, icon:'ri-car-fill', bg:'#1677FF', isMine:true, status:'normal', bidders:[], hasNewBid:false, images:{...this.uploadImages}, insurances:{...this.form.insurances} };
+                    this.list.unshift(item); this.sub = null; this.tab='home';
+                },
+                doBid() {
+                    const total = Number(this.quoteForm.jq)+Number(this.quoteForm.sy)+Number(this.quoteForm.fee);
+                    this.cur.status = 'quoted'; this.cur.users++; this.cur.myQuote = total; this.cur.quoteDetails = {...this.quoteForm};
+                    this.myQuotePrice = total;
+                },
+                demoSimulateBids() {
+                    this.cur.bidders.push({ name: '平安直通', amount: 4500, details: {jq:950, sy:3000, fee:550} });
+                    this.cur.users++; this.cur.hasNewBid = true;
+                    this.addMessage('新报价', '您的订单收到新报价');
+                    this.saveData();
+                },
+                
+                initiateDeal(bid) {
+                    this.cur.pendingBid = bid;
+                    const fee = Number(bid.details.fee);
+                    if (fee > 0) this.initiatePayment('deal', fee); else this.doConfirmDeal();
+                },
+                doConfirmDeal() {
+                    this.cur.status = 'pending_proof'; this.cur.winnerId = 'other'; this.cur.finalFee = this.cur.pendingBid.details.fee;
+                    this.showToast('已支付托管，等待出单'); this.saveData();
+                },
+                handleProofUpload(e) {
+                    const file = e.target.files[0]; if(!file) return;
+                    const reader = new FileReader(); 
+                    reader.onload = (e) => { this.cur.proofImage = e.target.result; this.cur.status = 'proof_uploaded'; this.saveData(); }; 
+                    reader.readAsDataURL(file);
+                },
+                confirmCompletion() {
+                    if(confirm('确认凭证无误并放款？')) {
+                        this.cur.status = 'completed';
+                        this.frozenAmount -= 50; this.balance += 50; // 退押金
+                        this.fundList.unshift({title:'交易完成退押', amount: 50});
+                        this.showToast('交易完成'); this.saveData();
+                    }
+                },
+                
+                // 纠纷与通用
+                openDispute() { this.showDisputeModal = true; },
+                submitDispute() { this.showToast('提交成功'); this.showDisputeModal = false; },
+                
+                goDetail(t) { 
+                    this.cur = t; this.sub = 'detail'; 
+                    if(t.isMine) { t.hasNewBid = false; this.saveData(); }
+                    if(t.status === 'quoted') { this.myQuotePrice = t.myQuote; this.quoteForm = t.quoteDetails || {jq:'',sy:'',fee:''}; }
+                    else { this.quoteForm = {jq:'',sy:'',fee:''}; this.myQuotePrice = null; }
+                },
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
